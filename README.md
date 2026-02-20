@@ -1,161 +1,188 @@
-# An MCP-based Chatbot | 一个基于 MCP 的聊天机器人
+# 小智 AI 闹钟系统 (Xiaozhi Alarm with MCP Server)
 
 （中文 | [English](README_en.md) | [日本語](README_ja.md)）
 
-## 视频
+## 项目简介
 
-👉 [人类：给 AI 装摄像头 vs AI：当场发现主人三天没洗头【bilibili】](https://www.bilibili.com/video/BV1bpjgzKEhd/)
+这是一个基于 ESP32-S3 的 AI 闹钟系统，采用 MCP (Model Context Protocol) 服务器架构，提供智能语音交互和闹钟管理功能。项目支持多种硬件平台，具有强大的扩展性和灵活性。
 
-👉 [手工打造你的 AI 女友，新手入门教程【bilibili】](https://www.bilibili.com/video/BV1XnmFYLEJN/)
+## 核心功能
 
-## 介绍
+### 1. 智能语音交互
+- 离线语音唤醒（支持 ESP-SR 框架）
+- 流式语音识别 (ASR)
+- 自然语言处理 (LLM) 集成
+- 语音合成 (TTS) 输出
+- 支持多种通信协议（WebSocket 或 MQTT+UDP）
 
-这是一个由虾哥开源的 ESP32 项目，以 MIT 许可证发布，允许任何人免费使用，或用于商业用途。
+### 2. 闹钟管理系统
+- **多种闹钟类型**：支持一次性闹钟、循环闹钟、倒计时闹钟
+- **持久化存储**：使用 NVS (Non-Volatile Storage) 存储闹钟配置
+- **灵活配置**：可设置闹钟名称、触发时间、重复模式、间隔等
+- **实时提醒**：闹钟触发时播放提示音并震动
+- **MCP 工具集成**：通过 MCP 协议远程管理闹钟
 
-我们希望通过这个项目，能够帮助大家了解 AI 硬件开发，将当下飞速发展的大语言模型应用到实际的硬件设备中。
+### 3. 硬件支持
+- **ESP32-S3** 芯片平台
+- **多种显示屏**：OLED、LCD 支持表情显示
+- **音频编解码**：K10AudioCodec 音频处理
+- **摄像头**：GC2145 摄像头传感器（可选）
+- **LED 控制**：地址able LED 条支持
+- **GPIO 扩展**：PCA9554 IO 扩展器
+- **电源管理**：电量显示与低功耗模式
 
-如果你有任何想法或建议，请随时提出 Issues 或加入 QQ 群：1011329060
+### 4. MCP 协议扩展
+- **设备控制工具**：通过 MCP 协议实现设备控制
+- **硬件抽象层**：支持多种硬件平台和传感器
+- **云端集成**：可与大模型服务器通信
+- **动态工具注册**：根据硬件自动注册可用工具
 
-### 基于 MCP 控制万物
+## 架构设计
 
-小智 AI 聊天机器人作为一个语音交互入口，利用 Qwen / DeepSeek 等大模型的 AI 能力，通过 MCP 协议实现多端控制。
+### 核心组件
 
-![通过MCP控制万物](docs/mcp-based-graph.jpg)
+1. **Application** (`main/application.cc`)
+   - 设备状态机管理（12种状态）
+   - 语音交互流程控制
+   - MQTT 连接管理
+   - 状态切换与事件处理
 
-### 已实现功能
+2. **Alarm Manager** (`main/alarm_manager.cc/h`)
+   - 闹钟生命周期管理
+   - 定时器调度与触发
+   - 持久化存储管理
+   - 闹钟数量限制（最多支持10个闹钟）
 
-- Wi-Fi / ML307 Cat.1 4G
-- 离线语音唤醒 [ESP-SR](https://github.com/espressif/esp-sr)
-- 支持两种通信协议（[Websocket](docs/websocket.md) 或 MQTT+UDP）
-- 采用 OPUS 音频编解码
-- 基于流式 ASR + LLM + TTS 架构的语音交互
-- 声纹识别，识别当前说话人的身份 [3D Speaker](https://github.com/modelscope/3D-Speaker)
-- OLED / LCD 显示屏，支持表情显示
-- 电量显示与电源管理
-- 支持多语言（中文、英文、日文）
-- 支持 ESP32-C3、ESP32-S3、ESP32-P4 芯片平台
-- 通过设备端 MCP 实现设备控制（音量、灯光、电机、GPIO 等）
-- 通过云端 MCP 扩展大模型能力（智能家居控制、PC桌面操作、知识搜索、邮件收发等）
+3. **MCP Server** (`main/mcp_server.cc/h`)
+   - MCP 协议实现
+   - 工具注册与管理
+   - JSON-RPC 2.0 通信
+   - 设备控制接口
 
-## 硬件
+4. **Audio Service** (`main/audio/audio_service.cc/h`)
+   - 音频捕获与播放
+   - 编解码处理
+   - 语音唤醒检测
+   - 音频效果处理
 
-### 面包板手工制作实践
+### 状态机设计
 
-详见飞书文档教程：
+设备支持以下状态：
+- `kDeviceStateUnknown`：未知状态
+- `kDeviceStateStarting`：启动中
+- `kDeviceStateConfiguring`：配置中
+- `kDeviceStateIdle`：空闲状态（可休眠）
+- `kDeviceStateConnecting`：连接服务器
+- `kDeviceStateListening`：聆听状态
+- `kDeviceStateSpeaking`：播放状态
+- `kDeviceStateUpgrading`：升级中
+- `kDeviceStateActivating`：激活中
+- `kDeviceStateAudioTesting`：音频测试
+- `kDeviceStateFatalError`：致命错误
 
-👉 [《小智 AI 聊天机器人百科全书》](https://ccnphfhqs21z.feishu.cn/wiki/F5krwD16viZoF0kKkvDcrZNYnhb?from=from_copylink)
+## 关键修复
 
-面包板效果图如下：
+### 1. 回答完毕后不进入聆听状态
 
-![面包板效果图](docs/v1/wiring2.jpg)
+**问题**：当 AI 回答完毕时，系统可能停留在 Speaking 状态，导致无法继续对话。
 
-### 支持 70 多个开源硬件（仅展示部分）
+**解决方案**：
+- 优化 `tts` -> `stop` 消息处理逻辑
+- 根据不同的聆听模式（ManualStop、AutoStop、Realtime）正确切换状态
+- 增强状态切换的日志输出，便于调试
 
-- <a href="https://oshwhub.com/li-chuang-kai-fa-ban/li-chuang-shi-zhan-pai-esp32-s3-kai-fa-ban" target="_blank" title="立创·实战派 ESP32-S3 开发板">立创·实战派 ESP32-S3 开发板</a>
-- <a href="https://github.com/espressif/esp-box" target="_blank" title="乐鑫 ESP32-S3-BOX3">乐鑫 ESP32-S3-BOX3</a>
-- <a href="https://docs.m5stack.com/zh_CN/core/CoreS3" target="_blank" title="M5Stack CoreS3">M5Stack CoreS3</a>
-- <a href="https://docs.m5stack.com/en/atom/Atomic%20Echo%20Base" target="_blank" title="AtomS3R + Echo Base">M5Stack AtomS3R + Echo Base</a>
-- <a href="https://gf.bilibili.com/item/detail/1108782064" target="_blank" title="神奇按钮 2.4">神奇按钮 2.4</a>
-- <a href="https://www.waveshare.net/shop/ESP32-S3-Touch-AMOLED-1.8.htm" target="_blank" title="微雪电子 ESP32-S3-Touch-AMOLED-1.8">微雪电子 ESP32-S3-Touch-AMOLED-1.8</a>
-- <a href="https://github.com/Xinyuan-LilyGO/T-Circle-S3" target="_blank" title="LILYGO T-Circle-S3">LILYGO T-Circle-S3</a>
-- <a href="https://oshwhub.com/tenclass01/xmini_c3" target="_blank" title="虾哥 Mini C3">虾哥 Mini C3</a>
-- <a href="https://oshwhub.com/movecall/cuican-ai-pendant-lights-up-y" target="_blank" title="Movecall CuiCan ESP32S3">璀璨·AI 吊坠</a>
-- <a href="https://github.com/WMnologo/xingzhi-ai" target="_blank" title="无名科技Nologo-星智-1.54">无名科技 Nologo-星智-1.54TFT</a>
-- <a href="https://www.seeedstudio.com/SenseCAP-Watcher-W1-A-p-5979.html" target="_blank" title="SenseCAP Watcher">SenseCAP Watcher</a>
-- <a href="https://www.bilibili.com/video/BV1BHJtz6E2S/" target="_blank" title="ESP-HI 超低成本机器狗">ESP-HI 超低成本机器狗</a>
+**修改文件**：`main/application.cc:435-451`
 
-<div style="display: flex; justify-content: space-between;">
-  <a href="docs/v1/lichuang-s3.jpg" target="_blank" title="立创·实战派 ESP32-S3 开发板">
-    <img src="docs/v1/lichuang-s3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/espbox3.jpg" target="_blank" title="乐鑫 ESP32-S3-BOX3">
-    <img src="docs/v1/espbox3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/m5cores3.jpg" target="_blank" title="M5Stack CoreS3">
-    <img src="docs/v1/m5cores3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/atoms3r.jpg" target="_blank" title="AtomS3R + Echo Base">
-    <img src="docs/v1/atoms3r.jpg" width="240" />
-  </a>
-  <a href="docs/v1/magiclick.jpg" target="_blank" title="神奇按钮 2.4">
-    <img src="docs/v1/magiclick.jpg" width="240" />
-  </a>
-  <a href="docs/v1/waveshare.jpg" target="_blank" title="微雪电子 ESP32-S3-Touch-AMOLED-1.8">
-    <img src="docs/v1/waveshare.jpg" width="240" />
-  </a>
-  <a href="docs/v1/lilygo-t-circle-s3.jpg" target="_blank" title="LILYGO T-Circle-S3">
-    <img src="docs/v1/lilygo-t-circle-s3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/xmini-c3.jpg" target="_blank" title="虾哥 Mini C3">
-    <img src="docs/v1/xmini-c3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/movecall-cuican-esp32s3.jpg" target="_blank" title="CuiCan">
-    <img src="docs/v1/movecall-cuican-esp32s3.jpg" width="240" />
-  </a>
-  <a href="docs/v1/wmnologo_xingzhi_1.54.jpg" target="_blank" title="无名科技Nologo-星智-1.54">
-    <img src="docs/v1/wmnologo_xingzhi_1.54.jpg" width="240" />
-  </a>
-  <a href="docs/v1/sensecap_watcher.jpg" target="_blank" title="SenseCAP Watcher">
-    <img src="docs/v1/sensecap_watcher.jpg" width="240" />
-  </a>
-  <a href="docs/v1/esp-hi.jpg" target="_blank" title="ESP-HI 超低成本机器狗">
-    <img src="docs/v1/esp-hi.jpg" width="240" />
-  </a>
-</div>
+### 2. 防止闹钟触发前系统进入休眠
 
-## 软件
+**问题**：系统在闹钟即将触发时可能进入低功耗模式，导致闹钟无法正常响铃。
 
-### 固件烧录
+**解决方案**：
+- 在 `CanEnterSleepMode()` 函数中添加闹钟保护逻辑
+- 检查 AlarmManager 中是否有“已激活且未触发”的闹钟
+- 添加 `get_active_alarm_count()` 接口获取活跃闹钟数量
+- 在闹钟存在时禁止进入低功耗模式
 
-新手第一次操作建议先不要搭建开发环境，直接使用免开发环境烧录的固件。
+**修改文件**：`main/application.cc:758-783`、`main/alarm_manager.h:29`、`main/alarm_manager.cc:227-237`
 
-固件默认接入 [xiaozhi.me](https://xiaozhi.me) 官方服务器，个人用户注册账号可以免费使用 Qwen 实时模型。
+### 3. 闹钟响铃无声音
 
-👉 [新手烧录固件教程](https://ccnphfhqs21z.feishu.cn/wiki/Zpz4wXBtdimBrLk25WdcXzxcnNS)
+**问题**：闹钟触发时可能没有声音提示。
 
-### 开发环境
+**解决方案**：
+- 在闹钟触发时先清理当前对话状态
+- 播放本地提示音（使用 P3_EXCLAMATION 声音）
+- 确保音频服务已初始化
 
-- Cursor 或 VSCode
-- 安装 ESP-IDF 插件，选择 SDK 版本 5.4 或以上
-- Linux 比 Windows 更好，编译速度快，也免去驱动问题的困扰
-- 本项目使用 Google C++ 代码风格，提交代码时请确保符合规范
+**修改文件**：`main/alarm_manager.cc:280-300`
 
-### 开发者文档
+## 开发环境
 
-- [自定义开发板指南](main/boards/README.md) - 学习如何为小智 AI 创建自定义开发板
-- [MCP 协议物联网控制用法说明](docs/mcp-usage.md) - 了解如何通过 MCP 协议控制物联网设备
-- [MCP 协议交互流程](docs/mcp-protocol.md) - 设备端 MCP 协议的实现方式
-- [MQTT + UDP 混合通信协议文档](docs/mqtt-udp.md)
-- [一份详细的 WebSocket 通信协议文档](docs/websocket.md)
+### 构建工具
+- **ESP-IDF 5.4** 或更高版本
+- **CMake** 构建系统
+- **Ninja** 构建工具
 
-## 大模型配置
+### 开发流程
 
-如果你已经拥有一个的小智 AI 聊天机器人设备，并且已接入官方服务器，可以登录 [xiaozhi.me](https://xiaozhi.me) 控制台进行配置。
+```bash
+# 编译项目
+idf.py build
 
-👉 [后台操作视频教程（旧版界面）](https://www.bilibili.com/video/BV1jUCUY2EKM/)
+# 擦除 flash 并烧录
+idf.py erase-flash
+idf.py flash
 
-## 相关开源项目
+# 监视串口输出
+idf.py monitor
+```
 
-在个人电脑上部署服务器，可以参考以下第三方开源的项目：
+### 项目结构
+```
+main/
+├── application.cc/h          # 主应用程序
+├── alarm_manager.cc/h        # 闹钟管理
+├── mcp_server.cc/h           # MCP 服务器
+├── audio/                    # 音频处理
+├── boards/                   # 硬件支持
+├── display/                  # 显示驱动
+├── led/                      # LED 控制
+├── protocols/                # 通信协议
+├── partitions/               # 分区表
+└── scripts/                  # 工具脚本
+```
 
-- [xinnan-tech/xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server) Python 服务器
-- [joey-zhou/xiaozhi-esp32-server-java](https://github.com/joey-zhou/xiaozhi-esp32-server-java) Java 服务器
-- [AnimeAIChat/xiaozhi-server-go](https://github.com/AnimeAIChat/xiaozhi-server-go) Golang 服务器
+## 使用说明
 
-使用小智通信协议的第三方客户端项目：
+### 设置闹钟
 
-- [huangjunsen0406/py-xiaozhi](https://github.com/huangjunsen0406/py-xiaozhi) Python 客户端
-- [TOM88812/xiaozhi-android-client](https://github.com/TOM88812/xiaozhi-android-client) Android 客户端
-- [100askTeam/xiaozhi-linux](http://github.com/100askTeam/xiaozhi-linux) 百问科技提供的 Linux 客户端
-- [78/xiaozhi-sf32](https://github.com/78/xiaozhi-sf32) 思澈科技的蓝牙芯片固件
-- [QuecPython/solution-xiaozhiAI](https://github.com/QuecPython/solution-xiaozhiAI) 移远提供的 QuecPython 固件
+通过语音指令或 MCP 协议设置闹钟：
+```
+"设置一个明天早上7点的闹钟"
+"30分钟后提醒我"
+"每天下午3点的闹钟"
+```
 
-## Star History
+### 管理闹钟
 
-<a href="https://star-history.com/#78/xiaozhi-esp32&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=78/xiaozhi-esp32&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=78/xiaozhi-esp32&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=78/xiaozhi-esp32&type=Date" />
- </picture>
-</a>
+- 查询所有闹钟：`"查询所有闹钟"`
+- 删除闹钟：`"删除明天的闹钟"`
+- 删除关键词匹配的闹钟：`"删除名字包含会议的闹钟"`
+
+### 硬件支持
+
+项目支持多种开发板和硬件平台，详细列表请查看 [main/boards/README.md](main/boards/README.md)。
+
+## 许可证
+
+MIT License
+
+## 联系方式
+
+如有问题或建议，请通过以下方式联系：
+- Issue：https://github.com/Jason76789/xiaozhi-alarm-mcp/issues
+- 邮箱：1935724779@qq.com
+
+## 致谢
+
+本项目基于虾哥开源的 ESP32 项目开发，感谢原作者的贡献。
