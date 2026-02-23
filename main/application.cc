@@ -436,6 +436,11 @@ void Application::Start() {
                 Schedule([this]() {
                     ESP_LOGD(TAG, "TTS stop received, current state: %s, listening_mode: %d",
                              STATE_STRINGS[device_state_], listening_mode_);
+
+                    // 停止闹钟
+                    static auto* alarm_mgr = AlarmManager::get_instance();
+                    alarm_mgr->StopRing();
+
                     if (device_state_ == kDeviceStateSpeaking) {
                         if (listening_mode_ == kListeningModeManualStop) {
                             ESP_LOGD(TAG, "Listening mode is ManualStop, switching to IDLE");
@@ -603,6 +608,76 @@ void Application::MainEventLoop() {
                 task();
             }
         }
+
+#if CONFIG_USE_ALARM
+        // 闹钟检查逻辑 - 优化后的状态机实现
+        static auto* alarm_mgr = AlarmManager::get_instance();
+        static DeviceState alarm_last_state = kDeviceStateIdle;
+        static bool alarm_sound_played = false;
+        static bool tts_requested = false;
+        static std::string active_alarm_name = "";
+
+        if (alarm_mgr->IsRing()) {
+            // 闹钟正在触发
+            if (device_state_ != kDeviceStateSpeaking) {
+                // 进入闹钟状态时缓存闹钟名称，防止底层状态变化导致取不到名字
+                alarm_last_state = device_state_;
+                SetDeviceState(kDeviceStateSpeaking);
+                active_alarm_name = alarm_mgr->GetCurrentAlarmName(); // 立即缓存闹钟名称
+                alarm_sound_played = false;
+                tts_requested = false;
+                ESP_LOGI(TAG, "Alarm triggered, switching to speaking state from %s, alarm name: '%s'",
+                         STATE_STRINGS[alarm_last_state], active_alarm_name.c_str());
+            }
+
+            // 检查解码队列是否为空，确保音频播放的原子性
+            if (audio_service_.IsIdle()) {
+                if (!alarm_sound_played) {
+                    // 播放本地提示音 P3_6（一次）
+                    audio_service_.PlaySound(Lang::Sounds::P3_6);
+                    alarm_sound_played = true;
+                    ESP_LOGI(TAG, "Playing alarm sound P3_6");
+                } else if (!tts_requested) {
+                    // 播放音效后发送 TTS 消息
+                    ESP_LOGI(TAG, "Alarm sound played, sending TTS");
+
+                    // 构造 TTS 文本，处理空闹钟名称的情况
+                    std::string tts_text = "叮叮叮！闹钟时间到啦，该去";
+                    if (!active_alarm_name.empty()) {
+                        tts_text += active_alarm_name;
+                    } else {
+                        tts_text += "做事情"; // 空名称时的默认文本
+                    }
+                    tts_text += "了";
+
+                    // 确保音频通道可用
+                    if (!protocol_ || !protocol_->IsAudioChannelOpened()) {
+                        ESP_LOGW(TAG, "Audio channel not opened, trying to open");
+                        if (protocol_) {
+                            protocol_->OpenAudioChannel();
+                        }
+                    }
+
+                    // 发送 TTS 消息
+                    protocol_->SendTextToTts(tts_text);
+                    tts_requested = true;
+                    ESP_LOGI(TAG, "Sending alarm TTS: '%s'", tts_text.c_str());
+                }
+            }
+        } else {
+            // 闹钟停止触发，恢复状态
+            if (alarm_last_state != kDeviceStateIdle && device_state_ == kDeviceStateSpeaking) {
+                SetDeviceState(alarm_last_state);
+                alarm_last_state = kDeviceStateIdle;
+                alarm_sound_played = false;
+                tts_requested = false;
+                active_alarm_name = "";
+                // 务必调用底层清空当前触发状态的函数，确保下一个闹钟能正常触发
+                alarm_mgr->StopRing();
+                ESP_LOGI(TAG, "Alarm stopped, restoring to %s", STATE_STRINGS[alarm_last_state]);
+            }
+        }
+#endif // CONFIG_USE_ALARM
     }
 }
 
@@ -648,6 +723,11 @@ void Application::AbortSpeaking(AbortReason reason) {
     ESP_LOGI(TAG, "Abort speaking with reason: %d", reason);
     aborted_ = true;
     protocol_->SendAbortSpeaking(reason);
+
+    // 停止闹钟
+    static auto* alarm_mgr = AlarmManager::get_instance();
+    alarm_mgr->StopRing();
+
     // 确保不仅停止音频，还要重置协议层的对话上下文，并跳转到 LISTENING
     SetDeviceState(kDeviceStateListening);
 }

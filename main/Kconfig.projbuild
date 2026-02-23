@@ -468,6 +468,12 @@ config USE_AUDIO_DEBUGGER
     help
         启用音频调试功能，通过UDP发送音频数据
 
+config USE_ALARM
+    bool "Enable Alarm Functionality"
+    default y
+    help
+        启用闹钟功能，支持定时提醒和闹钟管理
+
 config USE_ACOUSTIC_WIFI_PROVISIONING
     bool "Enable Acoustic WiFi Provisioning"
     default n

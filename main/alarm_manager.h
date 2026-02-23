@@ -28,6 +28,11 @@ public:
     std::string query_all_alarms_json();
     int get_active_alarm_count();
 
+    // 轮询方式的闹钟触发检查
+    bool IsRing() const;
+    const char* GetCurrentAlarmName() const;
+    void StopRing();
+
 private:
     AlarmManager();
     ~AlarmManager();
@@ -41,6 +46,10 @@ private:
 
     Alarm alarms_[MAX_ALARMS];
     esp_timer_handle_t alarm_timers_[MAX_ALARMS];
+
+    // 闹钟触发状态跟踪
+    bool is_ringing_;
+    int current_alarm_id_;
 
     static AlarmManager* instance_;
 };

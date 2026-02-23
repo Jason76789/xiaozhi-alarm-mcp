@@ -14,6 +14,8 @@ AlarmManager* AlarmManager::instance_ = nullptr;
 AlarmManager::AlarmManager() {
     memset(alarms_, 0, sizeof(alarms_));
     memset(alarm_timers_, 0, sizeof(alarm_timers_));
+    is_ringing_ = false;
+    current_alarm_id_ = -1;
 }
 
 AlarmManager::~AlarmManager() {
@@ -289,17 +291,36 @@ void AlarmManager::alarm_timer_callback(void* arg) {
     get_instance()->handle_triggered_alarm(alarm);
 }
 
+bool AlarmManager::IsRing() const {
+    return is_ringing_;
+}
+
+const char* AlarmManager::GetCurrentAlarmName() const {
+    if (current_alarm_id_ >= 0 && current_alarm_id_ < MAX_ALARMS) {
+        return alarms_[current_alarm_id_].name.c_str();
+    }
+    return "";
+}
+
+void AlarmManager::StopRing() {
+    is_ringing_ = false;
+    current_alarm_id_ = -1;
+}
+
 void AlarmManager::handle_triggered_alarm(Alarm* alarm) {
     // TODO: Implement the actual alarm action (e.g., play sound, show on display)
     ESP_LOGI(TAG, "!!!!!!!! ALARM TRIGGERED: %s !!!!!!!!", alarm->name.c_str());
 
-    // 修复闹钟响铃无声音的问题
-    // 1. 先调用 AbortSpeaking 方法清理当前可能存在的对话状态
-    Application::GetInstance().AbortSpeaking(kAbortReasonNone);
+    // 确保闹钟触发状态能正确覆写，支持多闹钟触发
+    // 即使有其他闹钟正在触发，新的闹钟也能正确设置触发标志
+    is_ringing_ = false;
+    current_alarm_id_ = -1;
+    // 立即设置新的触发状态
+    is_ringing_ = true;
+    current_alarm_id_ = alarm->id;
 
-    // 2. 播放一个本地提示音（使用 P3_EXCLAMATION 声音作为替代）
-    // 注意：需要确保音频服务在播放前已初始化
-    Application::GetInstance().PlaySound(Lang::Sounds::P3_EXCLAMATION);
+    // 唤醒 Application 的 MainLoop，确保立即响应闹钟
+    Application::GetInstance().WakeUp();
 
     if (alarm->repeat > 1) {
         alarm->repeat--;

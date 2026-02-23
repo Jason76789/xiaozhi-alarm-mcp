@@ -17,3 +17,9 @@ main/mmap_generate_emoji.h
 *.pyc
 *.bin
 mmap_generate_*.h
+
+# 排除不需要上传的文件
+小智 AI 闹钟提醒功能实现.md
+CLAUDE.md
+闹钟.docx
+test_alarm.cpp
